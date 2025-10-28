@@ -1,378 +1,220 @@
-"""工作流引擎"""
+"""工作流引擎（动态图）"""
 import asyncio
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple
 from sqlalchemy.orm import Session
-from langgraph.graph import StateGraph, END
-from langgraph.graph.message import add_messages
-from langchain_core.messages import HumanMessage, AIMessage
-from config import settings
-from database import get_project_by_name, get_workflow_by_wf_id, update_workflow_status
-from models import WorkflowStatus, FileInfo
+from server.config import settings
+from server.database import update_workflow_status
+from server.models import WorkflowStatus, WorkflowGraphConfig, WorkflowNode
 from .WorkflowStorage import WorkflowStorage
-from ..ToolManager.ToolRegistry import tool_registry
-from ..DataManager.MetadataManager import MetadataManager
-
-
-class WorkflowState:
-    """工作流状态"""
-    
-    def __init__(self):
-        self.messages = []
-        self.files = []
-        self.processed_files = []
-        self.text_content = ""
-        self.summary = ""
-        self.error_message = ""
-        self.current_step = ""
-        self.metadata = {}
+from server.ToolManager.ToolRegistry import tool_registry
+from server.DataManager.MetadataManager import MetadataManager
+from server.LLMManager.LLMService import llm_service
 
 
 class WorkflowEngine:
-    """工作流引擎"""
-    
+    """根据 workflow_{timestamp}.json 动态执行工作流"""
+
     def __init__(self):
         self.workflow_storage = WorkflowStorage()
         self.metadata_manager = MetadataManager()
-        self.graph = None
-        self._build_workflow_graph()
-    
-    def _build_workflow_graph(self):
-        """构建工作流图"""
-        # 创建状态图
-        workflow = StateGraph(WorkflowState)
-        
-        # 添加节点
-        workflow.add_node("file_processing", self._process_files)
-        workflow.add_node("text_extraction", self._extract_text)
-        workflow.add_node("content_analysis", self._analyze_content)
-        workflow.add_node("summary_generation", self._generate_summary)
-        workflow.add_node("error_handling", self._handle_error)
-        
-        # 添加边
-        workflow.add_edge("file_processing", "text_extraction")
-        workflow.add_edge("text_extraction", "content_analysis")
-        workflow.add_edge("content_analysis", "summary_generation")
-        workflow.add_edge("summary_generation", END)
-        
-        # 错误处理边
-        workflow.add_edge("file_processing", "error_handling")
-        workflow.add_edge("text_extraction", "error_handling")
-        workflow.add_edge("content_analysis", "error_handling")
-        workflow.add_edge("summary_generation", "error_handling")
-        workflow.add_edge("error_handling", END)
-        
-        # 编译图
-        self.graph = workflow.compile()
-    
+
     async def execute_workflow(
-        self, 
-        db: Session, 
-        project_name: str, 
-        date: str, 
+        self,
+        db: Session,
+        project_name: str,
+        date: str,
         wf_id: str,
         files: List[str] = None,
         custom_prompt: str = None
     ) -> Tuple[bool, Optional[str], Optional[Dict[str, Any]]]:
-        """执行工作流"""
         try:
-            # 更新工作流状态为运行中
             update_workflow_status(db, wf_id, WorkflowStatus.RUNNING.value)
-            
-            # 获取工作流配置
-            workflow_config = self.workflow_storage.load_workflow_config(project_name, wf_id)
-            if not workflow_config:
+
+            # 加载工作流配置
+            graph_cfg_dict = self.workflow_storage.load_workflow_config(project_name, date, wf_id)
+            if not graph_cfg_dict:
                 raise ValueError(f"工作流配置不存在: {wf_id}")
-            
-            # 获取文件列表
-            if not files:
-                files = await self._get_project_files(project_name, date)
-            
-            # 创建初始状态
-            initial_state = WorkflowState()
-            initial_state.files = files
-            initial_state.metadata = {
-                "project_name": project_name,
+            graph_cfg = WorkflowGraphConfig(**graph_cfg_dict)
+
+            # 上下文
+            context: Dict[str, Any] = {
+                "project": project_name,
                 "date": date,
                 "wf_id": wf_id,
                 "custom_prompt": custom_prompt,
-                "workflow_config": workflow_config
+                "files": files or await self._get_project_files(project_name, date),
+                "aggregated_text": ""
             }
-            
-            # 执行工作流
-            result = await self.graph.ainvoke(initial_state)
-            
+
+            # 预处理：如果有文件，尽量拼接文本（由工具节点进一步处理）
+            context["aggregated_text"] = await self._aggregate_text_from_files(context["files"]) or ""
+
+            # 执行图
+            result = await self._run_graph(graph_cfg, context)
+
             # 保存输出
             output_data = {
-                "summary": result.summary,
-                "processed_files": result.processed_files,
-                "text_content": result.text_content,
-                "metadata": result.metadata,
+                "summary": result.get("summary", ""),
+                "context": {k: v for k, v in result.items() if k != "summary"},
                 "execution_time": datetime.now().isoformat()
             }
-            
-            success, output_path = self.workflow_storage.save_workflow_output(
-                project_name, date, wf_id, output_data
-            )
-            
-            if success:
-                # 更新工作流状态为成功
-                update_workflow_status(db, wf_id, WorkflowStatus.SUCCESS.value)
-                
-                # 更新元数据
-                await self._update_metadata_with_workflow_result(
-                    project_name, date, wf_id, result
-                )
-                
-                return True, "工作流执行成功", output_data
-            else:
-                # 更新工作流状态为失败
+            ok, output_path = self.workflow_storage.save_workflow_output(project_name, date, wf_id, output_data)
+            if not ok:
                 update_workflow_status(db, wf_id, WorkflowStatus.FAILED.value, "输出保存失败")
                 return False, "输出保存失败", None
-                
+
+            update_workflow_status(db, wf_id, WorkflowStatus.SUCCESS.value)
+            return True, "工作流执行成功", output_data
         except Exception as e:
-            # 更新工作流状态为失败
             update_workflow_status(db, wf_id, WorkflowStatus.FAILED.value, str(e))
             return False, f"工作流执行失败: {str(e)}", None
-    
-    async def _process_files(self, state: WorkflowState) -> WorkflowState:
-        """处理文件节点"""
-        try:
-            state.current_step = "file_processing"
-            processed_files = []
-            
-            for file_path in state.files:
-                try:
-                    # 根据文件类型选择处理工具
-                    file_ext = file_path.split('.')[-1].lower()
-                    
-                    if file_ext == 'pdf':
-                        tool = tool_registry.get_tool("pdf_parser")
-                    elif file_ext in ['jpg', 'jpeg', 'png', 'gif', 'bmp']:
-                        tool = tool_registry.get_tool("image_reader")
-                    else:
-                        # 默认使用文本处理工具
-                        tool = tool_registry.get_tool("text_processor")
-                    
-                    if tool:
-                        result = await tool.process(file_path)
-                        processed_files.append({
-                            "file_path": file_path,
-                            "tool_used": tool.name,
-                            "result": result
-                        })
-                    else:
-                        processed_files.append({
-                            "file_path": file_path,
-                            "tool_used": "none",
-                            "result": {"error": "No suitable tool found"}
-                        })
-                        
-                except Exception as e:
-                    processed_files.append({
-                        "file_path": file_path,
-                        "tool_used": "error",
-                        "result": {"error": str(e)}
-                    })
-            
-            state.processed_files = processed_files
-            return state
-            
-        except Exception as e:
-            state.error_message = f"文件处理失败: {str(e)}"
-            return state
-    
-    async def _extract_text(self, state: WorkflowState) -> WorkflowState:
-        """提取文本节点"""
-        try:
-            state.current_step = "text_extraction"
-            text_content = ""
-            
-            for processed_file in state.processed_files:
-                result = processed_file.get("result", {})
-                
-                # 从不同工具的结果中提取文本
-                if "text_content" in result:
-                    text_content += result["text_content"] + "\n"
-                elif "cleaned_text" in result:
-                    text_content += result["cleaned_text"] + "\n"
-                elif "text" in result:
-                    text_content += result["text"] + "\n"
-            
-            state.text_content = text_content.strip()
-            return state
-            
-        except Exception as e:
-            state.error_message = f"文本提取失败: {str(e)}"
-            return state
-    
-    async def _analyze_content(self, state: WorkflowState) -> WorkflowState:
-        """内容分析节点"""
-        try:
-            state.current_step = "content_analysis"
-            
-            # 使用文本处理工具分析内容
-            text_tool = tool_registry.get_tool("text_processor")
-            if text_tool and state.text_content:
-                analysis_result = await text_tool.process(state.text_content)
-                state.metadata["content_analysis"] = analysis_result
-            
-            return state
-            
-        except Exception as e:
-            state.error_message = f"内容分析失败: {str(e)}"
-            return state
-    
-    async def _generate_summary(self, state: WorkflowState) -> WorkflowState:
-        """生成总结节点"""
-        try:
-            state.current_step = "summary_generation"
-            
-            # 这里应该调用LLM服务生成总结
-            # 暂时使用简单的文本摘要
-            if state.text_content:
-                # 简单的文本摘要（取前500字符）
-                summary = state.text_content[:500]
-                if len(state.text_content) > 500:
-                    summary += "..."
-                
-                state.summary = summary
+
+    async def _run_graph(self, graph: WorkflowGraphConfig, context: Dict[str, Any]) -> Dict[str, Any]:
+        node_map: Dict[str, WorkflowNode] = {n.id: n for n in graph.nodes}
+        edges = graph.edges
+
+        # 找到start节点
+        start_ids = [n.id for n in graph.nodes if n.type == "start"]
+        if not start_ids:
+            raise ValueError("工作流缺少start节点")
+        current_id = start_ids[0]
+
+        visited_guard = 0
+        while True:
+            visited_guard += 1
+            if visited_guard > 1000:
+                raise RuntimeError("工作流可能存在循环导致超过最大步数")
+
+            node = node_map[current_id]
+            next_id = None
+
+            if node.type == "end":
+                break
+            elif node.type == "tool":
+                await self._exec_tool_node(node, context)
+            elif node.type == "llm":
+                await self._exec_llm_node(node, graph, context)
+            elif node.type == "branch":
+                # 分支节点不做处理，仅基于条件选择边
+                pass
+            elif node.type == "merge":
+                # 合并节点不做特殊处理
+                pass
+            elif node.type == "start":
+                # 起始节点
+                pass
             else:
-                state.summary = "没有可总结的内容"
-            
-            return state
-            
-        except Exception as e:
-            state.error_message = f"总结生成失败: {str(e)}"
-            return state
-    
-    async def _handle_error(self, state: WorkflowState) -> WorkflowState:
-        """错误处理节点"""
-        state.current_step = "error_handling"
-        state.summary = f"工作流执行失败: {state.error_message}"
-        return state
-    
+                raise ValueError(f"未知节点类型: {node.type}")
+
+            # 选择下一条边
+            outgoing = [e for e in edges if e.source == current_id]
+            if not outgoing:
+                # 没有后继，则结束
+                break
+            if len(outgoing) == 1 and not outgoing[0].condition:
+                next_id = outgoing[0].target
+            else:
+                # 有条件的边，按条件匹配第一条为准
+                chosen = None
+                for e in outgoing:
+                    if not e.condition:
+                        continue
+                    if self._eval_condition(e.condition, context):
+                        chosen = e
+                        break
+                if chosen is None:
+                    # 回退到无条件边
+                    fallback = next((e for e in outgoing if not e.condition), None)
+                    if not fallback:
+                        raise ValueError(f"分支节点 {current_id} 未匹配到任何条件边")
+                    next_id = fallback.target
+                else:
+                    next_id = chosen.target
+
+            current_id = next_id
+
+        # 结果
+        result = {
+            "summary": context.get("summary", ""),
+            **context
+        }
+        return result
+
+    async def _exec_tool_node(self, node: WorkflowNode, context: Dict[str, Any]):
+        tool_name = node.tool_name or node.params.get("tool_name")
+        if not tool_name:
+            raise ValueError(f"tool节点缺少tool_name: {node.id}")
+        # 构造输入
+        payload = {}
+        for k, v in (node.input_map or {}).items():
+            payload[k] = self._resolve_from_context(v, context)
+        # 若无映射则传递上下文
+        if not payload:
+            payload = context
+        result = await tool_registry.process_with_tool(tool_name, payload)
+        context[node.output_key or "result"] = result
+
+    async def _exec_llm_node(self, node: WorkflowNode, graph: WorkflowGraphConfig, context: Dict[str, Any]):
+        template_name = node.params.get("template") or graph.prompt_template or "default"
+        model_name = graph.llm_model
+        content_key = node.input_map.get("content") if node.input_map else None
+        content = self._resolve_from_context(content_key, context) if content_key else context.get("aggregated_text", "")
+        ok, summary_or_msg, meta = await llm_service.generate_summary(content=content, template_name=template_name, model_name=model_name, custom_prompt=context.get("custom_prompt"))
+        if ok:
+            context[node.output_key or "summary"] = summary_or_msg
+            context["summary"] = summary_or_msg
+            context.setdefault("llm_meta", []).append(meta)
+        else:
+            raise RuntimeError(f"LLM生成失败: {summary_or_msg}")
+
+    def _eval_condition(self, expr: str, context: Dict[str, Any]) -> bool:
+        # 支持表达式中用 ctx 引用上下文，如 ctx.get('result', {}).get('ok') == True
+        safe_globals = {"__builtins__": {}}
+        try:
+            return bool(eval(expr, safe_globals, {"ctx": context}))
+        except Exception:
+            return False
+
+    def _resolve_from_context(self, path: Optional[str], context: Dict[str, Any]):
+        if not path:
+            return None
+        # 支持 a.b.c 访问
+        cur: Any = context
+        for part in path.split('.'):
+            if isinstance(cur, dict) and part in cur:
+                cur = cur[part]
+            else:
+                return None
+        return cur
+
+    async def _aggregate_text_from_files(self, files: List[str]) -> str:
+        if not files:
+            return ""
+        texts: List[str] = []
+        # 简化：仅收集可读文本文件
+        for fp in files:
+            try:
+                if str(fp).lower().endswith(('.txt', '.md')):
+                    with open(fp, 'r', encoding='utf-8', errors='ignore') as f:
+                        texts.append(f.read())
+            except Exception:
+                continue
+        return "\n\n".join(texts)
+
     async def _get_project_files(self, project_name: str, date: str) -> List[str]:
-        """获取项目文件列表"""
         try:
             metadata = self.metadata_manager.load_metadata(project_name, date)
             if not metadata:
                 return []
-            
             files = []
             for file_info in metadata.files:
-                # 构建完整文件路径
                 file_path = settings.BASE_DIR / file_info.stored_path
                 if file_path.exists():
                     files.append(str(file_path))
-            
             return files
-            
-        except Exception as e:
-            print(f"获取项目文件失败: {e}")
-            return []
-    
-    async def _update_metadata_with_workflow_result(
-        self, 
-        project_name: str, 
-        date: str, 
-        wf_id: str, 
-        result: WorkflowState
-    ):
-        """更新元数据中的工作流结果"""
-        try:
-            from models import WorkflowInfo, SummaryInfo
-            
-            # 创建工作流信息
-            workflow_info = WorkflowInfo(
-                wf_id=wf_id,
-                name=f"工作流_{wf_id}",
-                started_at=datetime.now(),
-                finished_at=datetime.now(),
-                status=WorkflowStatus.SUCCESS,
-                outputs=[],  # 这里可以添加输出文件路径
-                llm_model=result.metadata.get("workflow_config", {}).get("llm_model"),
-                prompt_template=result.metadata.get("workflow_config", {}).get("prompt_template")
-            )
-            
-            # 更新工作流信息
-            self.metadata_manager.add_workflow_to_metadata(
-                project_name, date, workflow_info
-            )
-            
-            # 更新总结信息
-            summary_info = SummaryInfo(
-                auto_summary=result.summary,
-                user_notes=None
-            )
-            
-            self.metadata_manager.update_summary_in_metadata(
-                project_name, date, summary_info
-            )
-            
-        except Exception as e:
-            print(f"更新元数据失败: {e}")
-    
-    def get_workflow_status(self, db: Session, wf_id: str) -> Optional[Dict[str, Any]]:
-        """获取工作流状态"""
-        workflow = get_workflow_by_wf_id(db, wf_id)
-        
-        if not workflow:
-            return None
-        
-        return {
-            "wf_id": workflow.wf_id,
-            "name": workflow.name,
-            "status": workflow.status,
-            "started_at": workflow.started_at,
-            "finished_at": workflow.finished_at,
-            "error_message": workflow.error_message,
-            "llm_model": workflow.llm_model,
-            "prompt_template": workflow.prompt_template
-        }
-    
-    def cancel_workflow(self, db: Session, wf_id: str) -> bool:
-        """取消工作流"""
-        try:
-            workflow = get_workflow_by_wf_id(db, wf_id)
-            if not workflow:
-                return False
-            
-            if workflow.status in ["pending", "running"]:
-                update_workflow_status(db, wf_id, WorkflowStatus.FAILED.value, "用户取消")
-                return True
-            
-            return False
-            
-        except Exception as e:
-            print(f"取消工作流失败: {e}")
-            return False
-    
-    def get_workflow_execution_history(self, db: Session, project_id: int, limit: int = 10) -> List[Dict[str, Any]]:
-        """获取工作流执行历史"""
-        try:
-            workflows = db.query(Workflow).filter(
-                Workflow.project_id == project_id
-            ).order_by(Workflow.created_at.desc()).limit(limit).all()
-            
-            history = []
-            for workflow in workflows:
-                history.append({
-                    "wf_id": workflow.wf_id,
-                    "name": workflow.name,
-                    "status": workflow.status,
-                    "started_at": workflow.started_at,
-                    "finished_at": workflow.finished_at,
-                    "created_at": workflow.created_at,
-                    "error_message": workflow.error_message
-                })
-            
-            return history
-            
-        except Exception as e:
-            print(f"获取工作流执行历史失败: {e}")
+        except Exception:
             return []
 
 
-# 全局工作流引擎实例
 workflow_engine = WorkflowEngine()

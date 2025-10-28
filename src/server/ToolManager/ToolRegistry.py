@@ -1,7 +1,7 @@
 """工具注册表"""
-from typing import Dict, List, Any, Optional, Callable
+from typing import Dict, List, Any, Optional
 from abc import ABC, abstractmethod
-from .DataManager.ToolConfigManager import ToolConfigManager
+from server.DataManager.ToolConfigManager import ToolConfigManager
 
 
 class BaseTool(ABC):
@@ -95,11 +95,8 @@ class ToolRegistry:
     async def process_with_tool(self, tool_name: str, input_data: Any) -> Any:
         """使用指定工具处理数据"""
         tool = self.get_tool(tool_name)
-        if not tool:
-            raise ValueError(f"工具 '{tool_name}' 不存在")
-        
-        if not tool.enabled:
-            raise ValueError(f"工具 '{tool_name}' 已禁用")
+        if not tool or not tool.enabled:
+            raise ValueError(f"工具不可用: {tool_name}")
         
         return await tool.process(input_data)
     
@@ -125,6 +122,11 @@ class ToolRegistry:
             from .TextProcessor import TextProcessorTool
             text_tool = TextProcessorTool()
             self.register_tool(text_tool)
+
+            # 注册Excel读取工具
+            from .ExcelReader import ExcelReaderTool
+            excel_tool = ExcelReaderTool()
+            self.register_tool(excel_tool)
             
         except ImportError as e:
             print(f"加载默认工具失败: {e}")
@@ -134,24 +136,37 @@ class ToolRegistry:
         try:
             user_tools = self.tool_config_manager.get_user_tools()
             
-            for tool_name, tool_config in user_tools.items():
-                if tool_config.get("enabled", True):
-                    # 根据工具类型创建相应的工具实例
-                    tool_type = tool_config.get("type", "custom")
-                    
-                    if tool_type == "pdf_parser":
-                        from .PDFParser import PDFParserTool
-                        tool = PDFParserTool(tool_config)
-                    elif tool_type == "image_reader":
-                        from .ImageReader import ImageReaderTool
-                        tool = ImageReaderTool(tool_config)
-                    elif tool_type == "text_processor":
-                        from .TextProcessor import TextProcessorTool
-                        tool = TextProcessorTool(tool_config)
-                    else:
-                        # 自定义工具
-                        tool = CustomTool(tool_name, tool_config)
-                    
+            for _, tool_config in user_tools.items():
+                if not tool_config.get("enabled", True):
+                    continue
+                # 根据工具类型创建相应的工具实例
+                tool_type = tool_config.get("type", "custom")
+                name = tool_config.get("name")
+                
+                if tool_type == "pdf_parser":
+                    from .PDFParser import PDFParserTool
+                    tool = PDFParserTool(tool_config)
+                elif tool_type == "image_reader":
+                    from .ImageReader import ImageReaderTool
+                    tool = ImageReaderTool(tool_config)
+                elif tool_type == "text_processor":
+                    from .TextProcessor import TextProcessorTool
+                    tool = TextProcessorTool(tool_config)
+                elif tool_type == "excel_reader":
+                    from .ExcelReader import ExcelReaderTool
+                    tool = ExcelReaderTool(tool_config)
+                elif tool_type == "mcp":
+                    try:
+                        from .MCPClient import MCPTool
+                        tool = MCPTool(tool_config)
+                    except ImportError:
+                        print("MCPClient 未就绪，跳过 mcp 工具加载")
+                        tool = None # Ensure tool is None if MCP is not available
+                else:
+                    # 自定义工具
+                    tool = CustomTool(name, tool_config)
+                
+                if tool: # Only register if tool was successfully created
                     self.register_tool(tool)
                     
         except Exception as e:

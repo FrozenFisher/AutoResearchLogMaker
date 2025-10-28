@@ -1,0 +1,8 @@
+{
+  "name": "custom_tool_name",
+  "description": "用户自定义工具描述",
+  "type": "custom",
+  "config": {
+  },
+  "enabled": true
+}

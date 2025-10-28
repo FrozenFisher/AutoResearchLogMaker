@@ -151,41 +151,75 @@ class ToolResponse(BaseResponse):
     data: ToolConfig = Field(description="工具配置")
 
 
-# 工作流相关模型
-class WorkflowConfig(BaseModel):
-    """工作流配置模型"""
-    name: str = Field(description="工作流名称")
-    description: Optional[str] = Field(default=None, description="描述")
-    steps: List[Dict[str, Any]] = Field(description="工作流步骤")
-    prompt_template: Optional[str] = Field(default=None, description="提示模板")
-    llm_model: Optional[str] = Field(default=None, description="LLM模型")
+# 工作流图配置 Schema
+class WorkflowNode(BaseModel):
+    id: str
+    type: str  # tool | llm | branch | merge | start | end
+    name: Optional[str] = None
+    tool_name: Optional[str] = None
+    params: Dict[str, Any] = Field(default_factory=dict)
+    input_map: Dict[str, str] = Field(default_factory=dict)  # from context keys
+    output_key: str = Field(default="result")
+
+
+class WorkflowEdge(BaseModel):
+    source: str
+    target: str
+    condition: Optional[str] = None  # e.g. "result.success == true"
+
+
+class WorkflowGraphConfig(BaseModel):
+    name: str
+    llm_model: Optional[str] = None
+    prompt_template: Optional[str] = None
+    nodes: List[WorkflowNode]
+    edges: List[WorkflowEdge]
+
+    @validator("nodes")
+    def unique_node_ids(cls, v):
+        ids = [n.id for n in v]
+        if len(ids) != len(set(ids)):
+            raise ValueError("节点ID必须唯一")
+        return v
+
+    @validator("edges")
+    def edge_refs_exist(cls, v, values):
+        node_ids = set(n.id for n in values.get("nodes", []))
+        for e in v:
+            if e.source not in node_ids or e.target not in node_ids:
+                raise ValueError(f"边引用了不存在的节点: {e.source}->{e.target}")
+        return v
+
+
+class WorkflowConfigUpload(BaseModel):
+    name: str
+    graph: WorkflowGraphConfig
+
+
+class WorkflowTemplateResponse(BaseModel):
+    template: WorkflowGraphConfig
 
 
 class WorkflowListResponse(BaseResponse):
-    """工作流列表响应模型"""
     data: List[WorkflowInfo] = Field(description="工作流列表")
 
 
 class WorkflowStatusResponse(BaseResponse):
-    """工作流状态响应模型"""
     data: WorkflowInfo = Field(description="工作流信息")
 
 
 class StartWorkflowRequest(BaseModel):
-    """启动工作流请求模型"""
     workflow_name: str = Field(description="工作流名称")
     files: List[str] = Field(default_factory=list, description="文件列表")
     custom_prompt: Optional[str] = Field(default=None, description="自定义提示")
 
 
 class StartWorkflowResponse(BaseResponse):
-    """启动工作流响应模型"""
     data: str = Field(description="工作流ID")
 
 
 # 文件上传相关模型
 class FileUploadRequest(BaseModel):
-    """文件上传请求模型"""
     filename: str = Field(description="文件名")
     source: FileSource = Field(default=FileSource.MANUAL_UPLOAD, description="文件来源")
     tags: List[str] = Field(default_factory=list, description="标签")
@@ -193,12 +227,10 @@ class FileUploadRequest(BaseModel):
 
 
 class FileUploadResponse(BaseResponse):
-    """文件上传响应模型"""
     data: str = Field(description="文件路径")
 
 
 class FileUpdateRequest(BaseModel):
-    """文件更新请求模型"""
     filename: str = Field(description="文件名")
     source: FileSource = Field(default=FileSource.MANUAL_UPLOAD, description="文件来源")
     tags: List[str] = Field(default_factory=list, description="标签")
@@ -207,7 +239,6 @@ class FileUpdateRequest(BaseModel):
 
 
 class MetadataResponse(BaseResponse):
-    """元数据响应模型"""
     data: RecordMetadata = Field(description="记录元数据")
 
 

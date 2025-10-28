@@ -65,7 +65,7 @@ iii.
 
 
 Client
-1.	创建（项目）lib/{项目名}/data/{日期}
+1.	创建（项目）
 2.	Setting：page 
 {
 default_prompt: “###默认Prompt”；

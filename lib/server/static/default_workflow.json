@@ -1,0 +1,16 @@
+{
+  "name": "default_daily_summary",
+  "llm_model": "gpt-3.5-turbo",
+  "prompt_template": "default",
+  "nodes": [
+    {"id": "start", "type": "start", "output_key": "start"},
+    {"id": "collect_files", "type": "tool", "tool_name": "text_processor", "params": {}, "input_map": {"text": "aggregated_text"}, "output_key": "text_processed"},
+    {"id": "llm_summary", "type": "llm", "params": {"template": "default"}, "input_map": {"content": "text_processed.cleaned_text"}, "output_key": "summary"},
+    {"id": "end", "type": "end", "output_key": "end"}
+  ],
+  "edges": [
+    {"source": "start", "target": "collect_files"},
+    {"source": "collect_files", "target": "llm_summary"},
+    {"source": "llm_summary", "target": "end"}
+  ]
+}
