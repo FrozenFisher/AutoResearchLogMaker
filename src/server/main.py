@@ -1,3 +1,15 @@
+import sys
+from pathlib import Path
+
+# 确保可以找到 server 模块
+# 将项目根目录的 src 目录添加到路径中
+_project_root = Path(__file__).parent.parent.parent
+_src_dir = _project_root / "src"
+if str(_src_dir) not in sys.path:
+    sys.path.insert(0, str(_src_dir))
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from server.config import settings, ensure_directories

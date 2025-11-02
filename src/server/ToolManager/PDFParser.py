@@ -1,9 +1,15 @@
 """PDF解析工具"""
-import fitz  # PyMuPDF
+try:
+    import fitz  # PyMuPDF
+    PYMUPDF_AVAILABLE = True
+except ImportError:
+    PYMUPDF_AVAILABLE = False
+    fitz = None
+
 from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
 from .ToolRegistry import BaseTool
-from config import settings
+from server.config import settings
 
 
 class PDFParserTool(BaseTool):
@@ -15,6 +21,10 @@ class PDFParserTool(BaseTool):
             description="解析PDF文件，提取文本和图像",
             config=config or {}
         )
+        if not PYMUPDF_AVAILABLE:
+            self.enabled = False
+            print("⚠️  PDF解析工具已禁用: PyMuPDF 未安装")
+            print("   安装命令: pip install pymupdf")
         self.extract_images = self.config.get("extract_images", True)
         self.extract_tables = self.config.get("extract_tables", True)
         self.max_pages = self.config.get("max_pages", 100)
@@ -22,6 +32,11 @@ class PDFParserTool(BaseTool):
     
     async def process(self, input_data: Any) -> Dict[str, Any]:
         """处理PDF文件"""
+        if not PYMUPDF_AVAILABLE:
+            raise ImportError(
+                "PyMuPDF 未安装，无法解析PDF文件。"
+                "请运行: pip install pymupdf"
+            )
         if isinstance(input_data, str):
             # 文件路径
             file_path = Path(input_data)

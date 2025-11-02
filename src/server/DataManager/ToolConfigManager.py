@@ -4,7 +4,7 @@ import os
 import zlib
 from pathlib import Path
 from typing import Dict, List, Optional, Any
-from config import settings
+from server.config import settings
 
 
 class ToolConfigManager:

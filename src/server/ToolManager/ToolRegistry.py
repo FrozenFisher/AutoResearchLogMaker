@@ -107,29 +107,45 @@ class ToolRegistry:
     
     def _load_default_tools(self):
         """加载默认工具"""
+        # 注册PDF解析工具
         try:
-            # 注册PDF解析工具
             from .PDFParser import PDFParserTool
             pdf_tool = PDFParserTool()
             self.register_tool(pdf_tool)
-            
-            # 注册图片读取工具
+        except ImportError as e:
+            if "fitz" in str(e) or "No module named 'fitz'" in str(e):
+                print("⚠️  PDF解析工具不可用: PyMuPDF 未安装")
+                print("   安装命令: pip install pymupdf")
+            else:
+                print(f"⚠️  加载PDF解析工具失败: {e}")
+        
+        # 注册图片读取工具
+        try:
             from .ImageReader import ImageReaderTool
             image_tool = ImageReaderTool()
             self.register_tool(image_tool)
-            
-            # 注册文本处理工具
+        except ImportError as e:
+            if "paddleocr" in str(e).lower() or "PaddleOCR" in str(e):
+                print("⚠️  图片OCR工具不可用: PaddleOCR 未安装（可选）")
+                print("   安装命令: pip install paddlepaddle paddleocr")
+            else:
+                print(f"⚠️  加载图片读取工具失败: {e}")
+        
+        # 注册文本处理工具
+        try:
             from .TextProcessor import TextProcessorTool
             text_tool = TextProcessorTool()
             self.register_tool(text_tool)
-
-            # 注册Excel读取工具
+        except ImportError as e:
+            print(f"⚠️  加载文本处理工具失败: {e}")
+        
+        # 注册Excel读取工具
+        try:
             from .ExcelReader import ExcelReaderTool
             excel_tool = ExcelReaderTool()
             self.register_tool(excel_tool)
-            
         except ImportError as e:
-            print(f"加载默认工具失败: {e}")
+            print(f"⚠️  加载Excel读取工具失败: {e}")
     
     def _load_user_tools(self):
         """加载用户工具"""

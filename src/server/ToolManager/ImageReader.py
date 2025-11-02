@@ -5,7 +5,7 @@ from pathlib import Path
 from PIL import Image
 import numpy as np
 from .ToolRegistry import BaseTool
-from config import settings
+from server.config import settings
 
 try:
     from paddleocr import PaddleOCR

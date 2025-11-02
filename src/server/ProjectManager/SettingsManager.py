@@ -3,8 +3,8 @@ import os
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 import yaml
-from config import get_project_settings_path
-from models import ProjectSettings
+from server.config import get_project_settings_path
+from server.models import ProjectSettings
 
 
 class SettingsManager:

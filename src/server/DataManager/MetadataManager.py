@@ -4,8 +4,8 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
-from config import get_project_files_path, get_project_data_path, settings
-from models import RecordMetadata, FileInfo, AuthorInfo, SummaryInfo, WorkflowInfo, GitInfo, Permissions
+from server.config import get_project_files_path, get_project_data_path, settings
+from server.models import RecordMetadata, FileInfo, AuthorInfo, SummaryInfo, WorkflowInfo, GitInfo, Permissions
 
 
 class MetadataManager:

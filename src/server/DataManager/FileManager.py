@@ -6,8 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
 import mimetypes
-from config import settings, get_project_files_path
-from models import FileInfo, FileSource, FileStatus
+from server.config import settings, get_project_files_path
+from server.models import FileInfo, FileSource, FileStatus
 from .MetadataManager import MetadataManager
 
 

@@ -3,7 +3,7 @@ import os
 import re
 from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
-from config import settings
+from server.config import settings
 
 
 class PromptManager:

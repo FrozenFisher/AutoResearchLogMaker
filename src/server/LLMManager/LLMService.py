@@ -2,7 +2,7 @@
 import asyncio
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
-from config import settings
+from server.config import settings
 from .PromptManager import prompt_manager
 
 try:

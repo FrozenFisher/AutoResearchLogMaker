@@ -5,9 +5,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from config import settings, get_project_path, get_project_settings_path
-from database import get_project_by_name, create_project, Project
-from models import ProjectInfo, ProjectSettings
+from server.config import settings, get_project_path, get_project_settings_path
+from server.database import get_project_by_name, create_project, Project
+from server.models import ProjectInfo, ProjectSettings
 
 
 class ProjectManager:
