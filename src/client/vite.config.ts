@@ -8,6 +8,13 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    extensions: ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'],
+  },
+  optimizeDeps: {
+    include: ['element-plus', '@element-plus/icons-vue'],
+    esbuildOptions: {
+      target: 'esnext',
+    },
   },
   server: {
     port: 5173,
@@ -17,5 +24,8 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    commonjsOptions: {
+      include: [/element-plus/, /node_modules/],
+    },
   },
 });

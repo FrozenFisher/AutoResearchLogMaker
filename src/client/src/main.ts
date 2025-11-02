@@ -3,7 +3,8 @@ import { createPinia } from 'pinia';
 import ElementPlus from 'element-plus';
 import 'element-plus/dist/index.css';
 import * as ElementPlusIconsVue from '@element-plus/icons-vue';
-import zhCn from 'element-plus/dist/locale/zh-cn.mjs';
+// 直接导入 .mjs 文件
+import zhCn from 'element-plus/es/locale/lang/zh-cn.mjs';
 
 import App from './App.vue';
 import router from './router';
