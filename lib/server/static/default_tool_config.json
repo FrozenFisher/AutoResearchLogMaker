@@ -1,0 +1,40 @@
+{
+  "default_tools": {
+    "pdf_parser": {
+      "name": "pdf_parser",
+      "description": "解析PDF文件，提取文本/图片/表格",
+      "type": "pdf_parser",
+      "config": {
+        "extract_images": true,
+        "extract_tables": true,
+        "max_pages": 100,
+        "language": "zh"
+      },
+      "enabled": true
+    },
+    "image_reader": {
+      "name": "image_reader",
+      "description": "读取图片并进行OCR识别",
+      "type": "image_reader",
+      "config": {
+        "language": "ch",
+        "use_gpu": false,
+        "enable_detection": true,
+        "enable_recognition": true
+      },
+      "enabled": true
+    },
+    "text_processor": {
+      "name": "text_processor",
+      "description": "文本清理、分析、分段",
+      "type": "text_processor",
+      "config": {
+        "remove_extra_spaces": true,
+        "remove_special_chars": false,
+        "min_text_length": 10,
+        "max_text_length": 10000
+      },
+      "enabled": true
+    }
+  }
+}

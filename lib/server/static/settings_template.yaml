@@ -1,0 +1,8 @@
+default_prompt: "请分析以下文件内容并生成研究总结"
+project_name: "your_project_name"
+required_tools:
+  default_tools:
+    - pdf_parser
+    - image_reader
+    - text_processor
+  user_tools: []
