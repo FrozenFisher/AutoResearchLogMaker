@@ -63,6 +63,29 @@ if (Test-Path $toolConfigPath) {
 }
 
 Write-Host ""
+Write-Host "[验证] 验证安装..." -ForegroundColor Yellow
+try {
+    python -c "import fastapi, uvicorn, sqlalchemy; print('✓ 核心依赖正常')" 2>$null
+    if ($LASTEXITCODE -eq 0) { Write-Host "✓ 核心依赖正常" -ForegroundColor Green } else { Write-Host "✗ 核心依赖验证失败" -ForegroundColor Red }
+} catch {
+    Write-Host "✗ 核心依赖验证失败" -ForegroundColor Red
+}
+
+try {
+    python -c "import fitz; print('✓ PyMuPDF 正常')" 2>$null
+    if ($LASTEXITCODE -eq 0) { Write-Host "✓ PyMuPDF 正常" -ForegroundColor Green } else { Write-Host "✗ PyMuPDF 未安装" -ForegroundColor Yellow }
+} catch {
+    Write-Host "✗ PyMuPDF 未安装" -ForegroundColor Yellow
+}
+
+try {
+    python -c "from langchain_openai import ChatOpenAI; print('✓ LangChain 正常')" 2>$null
+    if ($LASTEXITCODE -eq 0) { Write-Host "✓ LangChain 正常" -ForegroundColor Green } else { Write-Host "✗ LangChain 未安装" -ForegroundColor Yellow }
+} catch {
+    Write-Host "✗ LangChain 未安装" -ForegroundColor Yellow
+}
+
+Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "安装完成！" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Cyan
@@ -70,9 +93,7 @@ Write-Host ""
 Write-Host "可选：安装 OCR 功能（体积较大，下载较慢）" -ForegroundColor Yellow
 Write-Host "运行: pip install paddlepaddle paddleocr" -ForegroundColor Gray
 Write-Host ""
-Write-Host "验证安装：" -ForegroundColor Cyan
-Write-Host "  python -c \"import fitz; print('✅ PyMuPDF OK')\"" -ForegroundColor Gray
-Write-Host "  python -c \"from langchain_openai import ChatOpenAI; print('✅ LangChain OK')\"" -ForegroundColor Gray
+Write-Host "启动服务器: python run_server.py" -ForegroundColor Cyan
 Write-Host ""
 
 pause

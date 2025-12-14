@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     API_PORT: int = 8000
     API_TITLE: str = "AutoResearchLogMaker API"
     API_VERSION: str = "0.1.0"
+    API_RELOAD: bool = True  # uvicorn reload 模式
+    API_LOG_LEVEL: str = "info"  # uvicorn 日志级别
+    API_WORKERS: int = 1  # uvicorn workers 数量
     
     # LLM配置
     OPENAI_API_KEY: Optional[str] = None
@@ -55,6 +58,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+        extra = "ignore"  # 忽略未定义的额外字段，避免验证错误
 
 
 # 全局配置实例

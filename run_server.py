@@ -17,23 +17,17 @@ def main():
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
     
+    # 加载配置
     try:
         from src.server.config import settings
+        host = os.getenv("API_HOST", getattr(settings, "API_HOST", "0.0.0.0"))
+        port = int(os.getenv("API_PORT", getattr(settings, "API_PORT", 8000)))
     except Exception as e:
-        # 兜底默认
+        # 兜底默认配置
         print(f"警告: 无法加载配置 ({e})，使用默认配置")
-    try:
-        from src.server.config import settings
-    except Exception:
-        # 兜底默认
-        class _S:
-            API_HOST = "0.0.0.0"
-            API_PORT = 8000
-        settings = _S()
+        host = os.getenv("API_HOST", "0.0.0.0")
+        port = int(os.getenv("API_PORT", 8000))
 
-    host = os.getenv("API_HOST", getattr(settings, "API_HOST", "0.0.0.0"))
-    port = int(os.getenv("API_PORT", getattr(settings, "API_PORT", 8000)))
-    
     # Windows 下的 reload 模式有兼容性问题，建议禁用
     # 如果需要热重载，可以设置为 True，但需要确保 PYTHONPATH 正确
     is_windows = os.name == 'nt'
@@ -69,16 +63,6 @@ def main():
             workers=int(os.getenv("API_WORKERS", "1")),
             env_file=".env" if Path(".env").exists() else None,
         )
-    reload_enabled = get_bool("API_RELOAD", True)
-
-    uvicorn.run(
-        "src.server.main:app",
-        host=host,
-        port=port,
-        reload=reload_enabled,
-        log_level=os.getenv("API_LOG_LEVEL", "info"),
-        workers=int(os.getenv("API_WORKERS", "1")),
-    )
 
 
 if __name__ == "__main__":
