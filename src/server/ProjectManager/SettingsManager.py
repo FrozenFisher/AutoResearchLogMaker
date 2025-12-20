@@ -38,11 +38,10 @@ class SettingsManager:
             
             with open(settings_path, 'w', encoding='utf-8') as f:
                 yaml.dump(
-                    settings.dict(), 
-                    f, 
-                    ensure_ascii=False, 
+                    settings.dict(),
+                    f,
                     default_flow_style=False,
-                    allow_unicode=True
+                    allow_unicode=True,
                 )
             
             return True

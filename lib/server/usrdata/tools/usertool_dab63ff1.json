@@ -1,0 +1,12 @@
+{
+  "name": "OCR",
+  "type": "image_reader",
+  "description": "",
+  "config": {
+    "language": "ch",
+    "use_gpu": false,
+    "enable_detection": true,
+    "enable_recognition": true
+  },
+  "enabled": true
+}

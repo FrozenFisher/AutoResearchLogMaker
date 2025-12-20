@@ -1,0 +1,65 @@
+{
+  "record_id": "20251217_220211_2123",
+  "project": "default_project",
+  "date": "2025-12-18",
+  "created_at": "2025-12-17 22:02:11.136045",
+  "updated_at": "2025-12-17 22:41:09.128021",
+  "author": {
+    "user_id": "system",
+    "display_name": "System"
+  },
+  "files": [
+    {
+      "file_id": "f_bff4ca08",
+      "filename": "code3.png",
+      "stored_path": "lib/server/usrdata/default_project/files/2025-12-18/code3_f_bff4ca08.png",
+      "original_name": "code3.png",
+      "crc32": "f4c5a1bd",
+      "mime": "image/png",
+      "size_bytes": 797308,
+      "uploaded_at": "2025-12-17 22:02:11.135914",
+      "source": "manual_upload",
+      "tags": [],
+      "language": "en",
+      "status": {
+        "ocr": "pending",
+        "parsed": "pending"
+      },
+      "notes": ""
+    },
+    {
+      "file_id": "f_b0c5cea5",
+      "filename": "code2.png",
+      "stored_path": "lib/server/usrdata/default_project/files/2025-12-18/code2_f_b0c5cea5.png",
+      "original_name": "code2.png",
+      "crc32": "aec1dd27",
+      "mime": "image/png",
+      "size_bytes": 1270525,
+      "uploaded_at": "2025-12-17 22:41:09.127255",
+      "source": "manual_upload",
+      "tags": [],
+      "language": "en",
+      "status": {
+        "ocr": "pending",
+        "parsed": "pending"
+      },
+      "notes": ""
+    }
+  ],
+  "summary": {
+    "auto_summary": null,
+    "user_notes": null
+  },
+  "workflows": [],
+  "tags": [],
+  "related_git": null,
+  "permissions": {
+    "read": [
+      "system"
+    ],
+    "write": [
+      "system"
+    ]
+  },
+  "notes_general": null
+}

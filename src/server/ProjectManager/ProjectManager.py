@@ -3,7 +3,7 @@ import os
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from sqlalchemy.orm import Session
 from server.config import settings, get_project_path, get_project_settings_path
 from server.database import get_project_by_name, create_project, Project
@@ -14,7 +14,8 @@ class ProjectManager:
     """项目管理器"""
     
     def __init__(self):
-        pass
+        # 当前项目配置文件，存放在全局 usrdata 目录下
+        self._current_project_file = settings.USRDATA_DIR / "current_project.txt"
     
     def create_project(
         self, 
@@ -294,7 +295,7 @@ class ProjectManager:
             
             import yaml
             with open(settings_path, 'w', encoding='utf-8') as f:
-                yaml.dump(settings_data, f, ensure_ascii=False, default_flow_style=False)
+                yaml.dump(settings_data, f, default_flow_style=False)
             
             return True
             
@@ -325,3 +326,25 @@ class ProjectManager:
                 dates.append(date_dir.name)
         
         return sorted(dates, reverse=True)  # 最新的在前
+
+    def get_current_project_name(self) -> Optional[str]:
+        """获取当前项目名称"""
+        try:
+            if not self._current_project_file.exists():
+                return None
+            content = self._current_project_file.read_text(encoding="utf-8").strip()
+            return content or None
+        except Exception as e:
+            print(f"读取当前项目失败: {e}")
+            return None
+
+    def set_current_project_name(self, name: str) -> bool:
+        """设置当前项目名称"""
+        try:
+            # 确保目录存在
+            self._current_project_file.parent.mkdir(parents=True, exist_ok=True)
+            self._current_project_file.write_text(name, encoding="utf-8")
+            return True
+        except Exception as e:
+            print(f"保存当前项目失败: {e}")
+            return False

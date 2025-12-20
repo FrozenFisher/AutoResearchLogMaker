@@ -29,11 +29,16 @@
         <el-empty description="暂无文件，请上传文件" />
       </div>
 
-      <el-table v-else :data="files" style="width: 100%">
+      <el-table
+        v-else
+        :data="files"
+        style="width: 100%"
+        @row-dblclick="previewFile"
+      >
         <el-table-column prop="filename" label="文件名" width="300" />
         <el-table-column prop="size_bytes" label="大小" width="120">
           <template #default="{ row }">
-            {{ formatFileSize(row.size_bytes) }}
+            {{ row.size_bytes ? formatFileSize(row.size_bytes) : '-' }}
           </template>
         </el-table-column>
         <el-table-column prop="source" label="来源" width="150" />
@@ -79,7 +84,7 @@
         drag
         multiple
       >
-        <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
         <div class="el-upload__text">
           将文件拖到此处，或<em>点击上传</em>
         </div>
@@ -97,17 +102,45 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 文件预览 -->
+    <el-drawer
+      v-model="previewVisible"
+      title="文件预览"
+      size="60%"
+      :with-header="true"
+    >
+      <div v-if="previewLoading" class="preview-loading">
+        <el-skeleton :rows="5" animated />
+      </div>
+      <div v-else-if="!previewUrl && !previewText" class="preview-empty">
+        <el-empty description="请选择要预览的文件" />
+      </div>
+      <div v-else class="preview-content">
+        <template v-if="previewType === 'image'">
+          <img :src="previewUrl" class="preview-image" />
+        </template>
+        <template v-else-if="previewType === 'pdf'">
+          <iframe :src="previewUrl" class="preview-iframe" />
+        </template>
+        <template v-else>
+          <pre class="preview-text">{{ previewText }}</pre>
+        </template>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch, inject } from 'vue';
+import { useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox, type UploadFile } from 'element-plus';
 import { Upload, UploadFilled } from '@element-plus/icons-vue';
 import { useProjectStore } from '../stores/project';
 import { api } from '../api';
 import dayjs from 'dayjs';
 
+const route = useRoute();
 const projectStore = useProjectStore();
 const selectedDate = ref(dayjs().format('YYYY-MM-DD'));
 const files = ref<any[]>([]);
@@ -117,7 +150,16 @@ const uploadRef = ref();
 const fileList = ref<UploadFile[]>([]);
 const uploading = ref(false);
 
+const previewVisible = ref(false);
+const previewLoading = ref(false);
+const previewUrl = ref<string>('');
+const previewType = ref<'image' | 'pdf' | 'text'>('text');
+const previewText = ref<string>('');
+
 const currentProject = computed(() => projectStore.currentProject);
+
+// 注入时间线刷新方法
+const refreshTimeline = inject<() => Promise<void>>('refreshTimeline');
 
 const loadFiles = async () => {
   if (!selectedDate.value) {
@@ -211,6 +253,10 @@ const uploadFiles = async () => {
       fileList.value = [];
       uploadRef.value?.clearFiles();
       await loadFiles();
+      // 刷新时间线
+      if (refreshTimeline) {
+        await refreshTimeline();
+      }
     }
 
     if (uploadedCount.fail > 0) {
@@ -221,8 +267,41 @@ const uploadFiles = async () => {
   }
 };
 
-const previewFile = (file: any) => {
-  ElMessage.info('预览功能开发中...');
+const previewFile = async (file: any) => {
+  const row = file?.filename ? file : file?.row || file;
+  if (!row || !row.filename) return;
+
+  previewVisible.value = true;
+  previewLoading.value = true;
+  previewUrl.value = '';
+  previewText.value = '';
+
+  try {
+    const blob = await api.previewFile(
+      currentProject.value,
+      selectedDate.value!,
+      row.filename
+    );
+    const mime = (blob as any).type as string;
+    const url = URL.createObjectURL(blob as any);
+
+    if (mime.startsWith('image/')) {
+      previewType.value = 'image';
+      previewUrl.value = url;
+    } else if (mime === 'application/pdf') {
+      previewType.value = 'pdf';
+      previewUrl.value = url;
+    } else {
+      previewType.value = 'text';
+      const text = await (blob as Blob).text();
+      previewText.value = text;
+    }
+  } catch (error) {
+    ElMessage.error('预览文件失败');
+    console.error('Preview file error:', error);
+  } finally {
+    previewLoading.value = false;
+  }
 };
 
 const deleteFile = async (file: any) => {
@@ -243,16 +322,38 @@ const formatFileSize = (bytes: number): string => {
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
 };
 
 const formatTime = (time: string): string => {
   return dayjs(time).format('YYYY-MM-DD HH:mm:ss');
 };
 
-onMounted(() => {
-  loadFiles();
+onMounted(async () => {
+  const qDate = route.query.date;
+  if (typeof qDate === 'string') {
+    selectedDate.value = qDate;
+  }
+  await loadFiles();
+
+  const qFile = route.query.file;
+  if (typeof qFile === 'string') {
+    const f = files.value.find((x) => x.file_id === qFile);
+    if (f) {
+      await previewFile(f);
+    }
+  }
 });
+
+watch(
+  () => route.query.date,
+  async (val) => {
+    if (typeof val === 'string' && val !== selectedDate.value) {
+      selectedDate.value = val;
+      await loadFiles();
+    }
+  }
+);
 </script>
 
 <style scoped>
@@ -270,4 +371,37 @@ onMounted(() => {
 .empty-container {
   padding: 40px 0;
 }
+
+.preview-loading,
+.preview-empty {
+  padding: 20px;
+}
+
+.preview-content {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+  margin: 0 auto;
+}
+
+.preview-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.preview-text {
+  white-space: pre-wrap;
+  font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
 </style>
+
+

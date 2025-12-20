@@ -17,6 +17,7 @@ from server.database import init_database
 from server.routers.tool_router import router as tool_router
 from server.routers.project_router import router as project_router
 from server.routers.data_router import router as data_router
+from server.routers.llm_router import router as llm_router
 
 app = FastAPI(title=settings.API_TITLE, version=settings.API_VERSION)
 
@@ -31,6 +32,7 @@ app.add_middleware(
 app.include_router(tool_router)
 app.include_router(project_router)
 app.include_router(data_router)
+app.include_router(llm_router)
 
 
 @app.on_event("startup")

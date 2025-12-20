@@ -23,8 +23,14 @@ class TextProcessorTool(BaseTool):
         """处理文本数据"""
         if isinstance(input_data, str):
             text = input_data
-        elif isinstance(input_data, dict) and "text_content" in input_data:
-            text = input_data["text_content"]
+        elif isinstance(input_data, dict):
+            # 兼容两种字段：text_content（推荐）和 text（旧配置）
+            if "text_content" in input_data:
+                text = input_data["text_content"]
+            elif "text" in input_data:
+                text = input_data["text"]
+            else:
+                raise ValueError("输入数据必须是字符串或包含text_content的字典")
         else:
             raise ValueError("输入数据必须是字符串或包含text_content的字典")
         

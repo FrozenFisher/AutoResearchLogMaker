@@ -1,0 +1,66 @@
+{
+  "name": "daily_summary",
+  "llm_model": "deepseek-chat",
+  "prompt_template": "default",
+  "nodes": [
+    {
+      "id": "start",
+      "type": "start",
+      "name": null,
+      "tool_name": null,
+      "params": {},
+      "input_map": {},
+      "output_key": "start"
+    },
+    {
+      "id": "collect_files",
+      "type": "tool",
+      "name": null,
+      "tool_name": "text_processor",
+      "params": {},
+      "input_map": {
+        "text": "aggregated_text"
+      },
+      "output_key": "text_processed"
+    },
+    {
+      "id": "llm_summary",
+      "type": "llm",
+      "name": null,
+      "tool_name": null,
+      "params": {
+        "template": "default"
+      },
+      "input_map": {
+        "content": "text_processed.cleaned_text"
+      },
+      "output_key": "summary"
+    },
+    {
+      "id": "end",
+      "type": "end",
+      "name": null,
+      "tool_name": null,
+      "params": {},
+      "input_map": {},
+      "output_key": "end"
+    }
+  ],
+  "edges": [
+    {
+      "source": "start",
+      "target": "collect_files",
+      "condition": null
+    },
+    {
+      "source": "collect_files",
+      "target": "llm_summary",
+      "condition": null
+    },
+    {
+      "source": "llm_summary",
+      "target": "end",
+      "condition": null
+    }
+  ]
+}

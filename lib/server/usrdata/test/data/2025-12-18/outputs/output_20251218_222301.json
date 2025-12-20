@@ -1,0 +1,43 @@
+{
+  "wf_id": "wf_20251218_222301",
+  "created_at": "2025-12-18T22:23:01.629478",
+  "output": {
+    "summary": "",
+    "context": {
+      "project": "test",
+      "date": "2025-12-18",
+      "wf_id": "wf_20251218_222301",
+      "custom_prompt": null,
+      "files": [
+        "/Users/ycc/Desktop/Mcqueen_yang/高中课题/demo/AutoResearchLogMaker/lib/server/usrdata/test/files/2025-12-18/code3_f_bff4ca08.png"
+      ],
+      "aggregated_text": "",
+      "text_processed": {
+        "original_text": "",
+        "cleaned_text": "",
+        "text_analysis": {
+          "length": 0,
+          "word_count": 0,
+          "line_count": 1,
+          "paragraph_count": 0,
+          "language_detection": "unknown",
+          "has_numbers": false,
+          "has_special_chars": false,
+          "sentiment_score": 0.0
+        },
+        "segments": [],
+        "processing_info": {
+          "original_length": 0,
+          "cleaned_length": 0,
+          "segment_count": 0,
+          "processing_applied": {
+            "remove_extra_spaces": true,
+            "remove_special_chars": false
+          }
+        }
+      }
+    },
+    "execution_time": "2025-12-18T22:23:01.629182",
+    "error": "LLM生成失败: 模型 'deepseek-chat' 不可用"
+  }
+}

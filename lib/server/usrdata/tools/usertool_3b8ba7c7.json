@@ -1,0 +1,12 @@
+{
+  "name": "text",
+  "type": "text_processor",
+  "description": "",
+  "config": {
+    "remove_extra_spaces": true,
+    "remove_special_chars": false,
+    "min_text_length": 10,
+    "max_text_length": 10000
+  },
+  "enabled": true
+}

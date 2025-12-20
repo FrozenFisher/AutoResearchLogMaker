@@ -43,12 +43,13 @@
           <el-input v-model="toolForm.name" placeholder="输入工具名称" />
         </el-form-item>
         <el-form-item label="类型" required>
-          <el-select v-model="toolForm.type" placeholder="选择工具类型">
-            <el-option label="自定义" value="custom" />
-            <el-option label="MCP" value="mcp" />
-            <el-option label="PDF解析" value="pdf_parser" />
-            <el-option label="图片OCR" value="image_reader" />
-            <el-option label="Excel读取" value="excel_reader" />
+          <el-select v-model="toolForm.type" placeholder="选择工具类型" @change="onTypeChange">
+            <el-option
+              v-for="item in toolTypeOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="描述">
@@ -64,8 +65,11 @@
             v-model="toolForm.configJson"
             type="textarea"
             :rows="6"
-            placeholder='输入 JSON 配置，例如: {"server_url": "https://example.com"}'
+            :placeholder="currentTemplatePlaceholder"
           />
+          <div v-if="currentTemplateHelp" class="template-help">
+            {{ currentTemplateHelp }}
+          </div>
         </el-form-item>
       </el-form>
 
@@ -80,7 +84,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus } from '@element-plus/icons-vue';
 import { api } from '../api';
@@ -96,16 +100,75 @@ const toolForm = ref({
   description: '',
   configJson: '{}',
 });
+const defaultTools = ref<Record<string, any>>({});
+const templates = ref<Record<string, any>>({});
+
+const toolTypeOptions = computed(() => {
+  const tpl = templates.value || {};
+  return Object.keys(tpl).map((key) => ({
+    value: key,
+    label: tpl[key].label || key,
+  }));
+});
+
+const currentTemplate = computed(() => {
+  return templates.value[toolForm.value.type] || null;
+});
+
+const currentTemplatePlaceholder = computed(() => {
+  if (!currentTemplate.value) {
+    return '输入 JSON 配置，例如: {"server_url": "https://example.com"}';
+  }
+  const fields = currentTemplate.value.fields || [];
+  const example: Record<string, any> = {};
+  fields.forEach((f: any) => {
+    example[f.name] = f.default ?? null;
+  });
+  return (
+    '根据下方字段说明填写 JSON 配置，例如：\n' +
+    JSON.stringify(example, null, 2)
+  );
+});
+
+const currentTemplateHelp = computed(() => {
+  if (!currentTemplate.value) return '';
+  const desc = currentTemplate.value.description || '';
+  const fields = currentTemplate.value.fields || [];
+  const fieldLines = fields.map(
+    (f: any) =>
+      `- ${f.label || f.name} (${f.name}): ${f.help || ''} ` +
+      (f.required ? '[必填]' : '')
+  );
+  return [desc, ...fieldLines].join('\n');
+});
 
 const loadTools = async () => {
   loading.value = true;
   try {
-    const result = await api.getToolList();
-    if (result.code === 0) {
-      tools.value = result.data || [];
+    const [listResult, defaultResult, templateResult] = await Promise.all([
+      api.getToolList(),
+      api.getDefaultTools(),
+      api.getToolTemplates(),
+    ]);
+    if (listResult.code === 0) {
+      const raw = listResult.data;
+      if (Array.isArray(raw)) {
+        tools.value = raw;
+      } else if (raw && typeof raw === 'object') {
+        // 后端返回的是 { tool_name: config, ... } 的对象，这里转成数组
+        tools.value = Object.values(raw);
+      } else {
+        tools.value = [];
+      }
+    }
+    if (defaultResult.code === 0) {
+      defaultTools.value = defaultResult.data?.default_tools || {};
+    }
+    if (templateResult.code === 0) {
+      templates.value = templateResult.data || {};
     }
   } catch (error) {
-    ElMessage.error('加载工具列表失败');
+    ElMessage.error('加载工具配置失败');
     console.error('Load tools error:', error);
   } finally {
     loading.value = false;
@@ -121,6 +184,18 @@ const editTool = async (tool: any) => {
     configJson: JSON.stringify(tool.config || {}, null, 2),
   };
   showAddDialog.value = true;
+};
+
+const onTypeChange = () => {
+  // 切换类型时，如果存在模板，则用模板默认值初始化配置
+  if (currentTemplate.value) {
+    const fields = currentTemplate.value.fields || [];
+    const config: Record<string, any> = {};
+    fields.forEach((f: any) => {
+      config[f.name] = f.default ?? null;
+    });
+    toolForm.value.configJson = JSON.stringify(config, null, 2);
+  }
 };
 
 const deleteTool = async (tool: any) => {

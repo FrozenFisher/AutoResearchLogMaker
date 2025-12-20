@@ -112,6 +112,32 @@ export const api = {
   editTool: (toolName: string, config: any): Promise<ApiResponse<any>> =>
     axiosInstance.post(`/tool/${toolName}/edit`, config),
 
+  getDefaultTools: (): Promise<ApiResponse<any>> =>
+    axiosInstance.get('/tool/defaults'),
+
+  getToolTemplates: (): Promise<ApiResponse<any>> =>
+    axiosInstance.get('/tool/templates'),
+
+  // 项目管理
+  getProjects: (): Promise<ApiResponse<any>> =>
+    axiosInstance.get('/project/projects'),
+
+  getCurrentProject: (): Promise<ApiResponse<any>> =>
+    axiosInstance.get('/project/projects/current'),
+
+  createProject: (payload: {
+    name: string;
+    display_name?: string;
+    description?: string;
+  }): Promise<ApiResponse<any>> =>
+    axiosInstance.post('/project/projects', payload),
+
+  switchProject: (payload: { name: string }): Promise<ApiResponse<any>> =>
+    axiosInstance.post('/project/projects/switch', payload),
+
+  deleteProject: (name: string): Promise<ApiResponse<any>> =>
+    axiosInstance.delete(`/project/projects/${name}`),
+
   // 文件管理
   uploadFile: (
     project: string,
@@ -172,9 +198,30 @@ export const api = {
   getMetadata: (project: string, date: string): Promise<ApiResponse<any>> =>
     axiosInstance.get(`/project/${project}/data/${date}/metadata`),
 
+  getRecordDates: (project: string): Promise<ApiResponse<string[]>> =>
+    axiosInstance.get(`/project/${project}/data/dates`),
+
+  previewFile: (
+    project: string,
+    date: string,
+    filename: string
+  ): Promise<Blob> =>
+    axiosInstance
+      .get(
+      `/project/${project}/data/${date}/preview`,
+      {
+        params: { filename },
+        responseType: 'blob',
+      }
+      )
+      .then((res) => res.data as Blob),
+
   // 工作流管理
   getWorkflowTemplate: (project: string): Promise<ApiResponse<any>> =>
     axiosInstance.get(`/project/${project}/workflow_template`),
+
+  getWorkflowList: (project: string): Promise<ApiResponse<WorkflowInfo[]>> =>
+    axiosInstance.get(`/project/${project}/workflow_list`),
 
   createWorkflowFromTemplate: (
     project: string,
@@ -212,4 +259,20 @@ export const api = {
     wfId: string
   ): Promise<ApiResponse<WorkflowInfo>> =>
     axiosInstance.get(`/project/${project}/workflow_status/${wfId}`),
+
+  getWorkflowDetail: (
+    project: string,
+    wfId: string
+  ): Promise<ApiResponse<{ status: any; output: any }>> =>
+    axiosInstance.get(`/project/${project}/workflow_detail/${wfId}`),
+
+  // LLM 配置
+  getLlmConfig: (): Promise<ApiResponse<{ base_url: string | null; has_api_key: boolean; default_model?: string | null }>> =>
+    axiosInstance.get('/llm/config'),
+
+  updateLlmConfig: (payload: { base_url: string; api_key?: string; default_model?: string }): Promise<ApiResponse<any>> =>
+    axiosInstance.post('/llm/config', payload),
+
+  getLlmModels: (): Promise<ApiResponse<Array<{ id: string; owned_by?: string; object?: string }>>> =>
+    axiosInstance.get('/llm/models'),
 };

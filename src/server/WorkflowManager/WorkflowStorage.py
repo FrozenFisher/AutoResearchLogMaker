@@ -27,6 +27,9 @@ class WorkflowStorage:
             return None
         with open(self.default_template_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
+            # 始终使用环境/配置中的 DEFAULT_LLM_MODEL 作为默认模型，
+            # 覆盖静态模板里的 llm_model 字段，保证与 .env / 设置页保持一致
+            data["llm_model"] = settings.DEFAULT_LLM_MODEL
             return WorkflowGraphConfig(**data)
 
     def save_workflow_config(self, project_name: str, date: str, wf_id: str, workflow_config: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
@@ -178,6 +181,36 @@ class WorkflowStorage:
                 continue
         outputs.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         return outputs
+
+    def get_workflow_output_by_wf_id(self, project_name: str, wf_id: str) -> Optional[Dict[str, Any]]:
+        """
+        根据 wf_id 查找对应的输出结果。
+        通过 wf_id 中的日期部分推断日期目录，例如:
+        wf_20251217_233034 -> 日期目录 2025-12-17
+        """
+        try:
+            parts = wf_id.split("_")
+            if len(parts) < 3:
+                return None
+            date_part = parts[1]  # 20251217
+            if len(date_part) != 8:
+                return None
+            date_str = f"{date_part[0:4]}-{date_part[4:6]}-{date_part[6:8]}"
+            outputs_dir = get_project_data_path(project_name, date_str) / "outputs"
+            if not outputs_dir.exists():
+                return None
+            for output_file in outputs_dir.glob("output_*.json"):
+                try:
+                    with open(output_file, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        if data.get("wf_id") == wf_id:
+                            # 返回其中的 output 字段（包含 summary 等）
+                            return data.get("output")
+                except Exception:
+                    continue
+            return None
+        except Exception:
+            return None
 
     def get_workflow_statistics(self, db: Session, project_id: int) -> Dict[str, Any]:
         workflows = self.list_workflow_executions(db, project_id)

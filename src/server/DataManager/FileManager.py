@@ -120,7 +120,7 @@ class FileManager:
         return None
     
     def get_file_content(self, project_name: str, date: str, file_id: str) -> Optional[bytes]:
-        """获取文件内容"""
+        """获取文件内容（通过 file_id）"""
         file_info = self.get_file_info(project_name, date, file_id)
         
         if not file_info:
@@ -136,6 +136,35 @@ class FileManager:
                 return f.read()
         except IOError:
             return None
+
+    def get_file_content_by_name(
+        self, project_name: str, date: str, filename: str
+    ) -> Tuple[bool, Optional[str], Optional[bytes], Optional[str]]:
+        """根据文件名获取文件内容和 MIME 类型，用于预览"""
+        try:
+            # 直接在项目文件目录中查找匹配的物理文件
+            files_dir = get_project_files_path(project_name, date)
+            if not files_dir.exists():
+                return False, "files directory not found", None, None
+
+            target_path: Optional[Path] = None
+            for path in files_dir.iterdir():
+                if not path.is_file():
+                    continue
+                # 存储文件名一般形如 name_f_xxxxxxxx.ext，这里用原始文件名前缀匹配
+                if path.name.startswith(os.path.splitext(filename)[0]):
+                    target_path = path
+                    break
+
+            if not target_path:
+                return False, "file not found", None, None
+
+            content = target_path.read_bytes()
+            mime_type, _ = mimetypes.guess_type(str(target_path))
+            mime_type = mime_type or "application/octet-stream"
+            return True, None, content, mime_type
+        except Exception as e:
+            return False, f"read file failed: {e}", None, None
     
     def delete_file(self, project_name: str, date: str, file_id: str) -> bool:
         """删除文件"""

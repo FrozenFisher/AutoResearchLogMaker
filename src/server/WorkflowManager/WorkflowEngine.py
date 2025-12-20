@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple
 from sqlalchemy.orm import Session
 from server.config import settings
-from server.database import update_workflow_status
+from server.database import update_workflow_status, get_workflow_by_wf_id
 from server.models import WorkflowStatus, WorkflowGraphConfig, WorkflowNode
 from .WorkflowStorage import WorkflowStorage
 from server.ToolManager.ToolRegistry import tool_registry
@@ -28,6 +28,7 @@ class WorkflowEngine:
         files: List[str] = None,
         custom_prompt: str = None
     ) -> Tuple[bool, Optional[str], Optional[Dict[str, Any]]]:
+        context: Dict[str, Any] = {}
         try:
             update_workflow_status(db, wf_id, WorkflowStatus.RUNNING.value)
 
@@ -38,7 +39,7 @@ class WorkflowEngine:
             graph_cfg = WorkflowGraphConfig(**graph_cfg_dict)
 
             # 上下文
-            context: Dict[str, Any] = {
+            context = {
                 "project": project_name,
                 "date": date,
                 "wf_id": wf_id,
@@ -67,6 +68,19 @@ class WorkflowEngine:
             update_workflow_status(db, wf_id, WorkflowStatus.SUCCESS.value)
             return True, "工作流执行成功", output_data
         except Exception as e:
+            # 尝试在失败时也保存当前上下文，方便调试
+            try:
+                debug_output = {
+                    "summary": context.get("summary", ""),
+                    "context": context,
+                    "execution_time": datetime.now().isoformat(),
+                    "error": str(e),
+                }
+                self.workflow_storage.save_workflow_output(project_name, date, wf_id, debug_output)
+            except Exception:
+                # 即使保存调试输出失败，也不要影响状态更新
+                pass
+
             update_workflow_status(db, wf_id, WorkflowStatus.FAILED.value, str(e))
             return False, f"工作流执行失败: {str(e)}", None
 
@@ -192,12 +206,31 @@ class WorkflowEngine:
         if not files:
             return ""
         texts: List[str] = []
-        # 简化：仅收集可读文本文件
         for fp in files:
+            path_str = str(fp)
+            lower = path_str.lower()
             try:
-                if str(fp).lower().endswith(('.txt', '.md')):
-                    with open(fp, 'r', encoding='utf-8', errors='ignore') as f:
+                # 纯文本文件，直接读取
+                if lower.endswith(('.txt', '.md')):
+                    with open(path_str, 'r', encoding='utf-8', errors='ignore') as f:
                         texts.append(f.read())
+                # PDF，通过 pdf_parser 提取文本（包括内置OCR能力）
+                elif lower.endswith('.pdf'):
+                    try:
+                        pdf_result = await tool_registry.process_with_tool("pdf_parser", path_str)
+                        if isinstance(pdf_result, dict) and pdf_result.get("text_content"):
+                            texts.append(pdf_result["text_content"])
+                    except Exception:
+                        # 单个文件失败不影响整体流程
+                        continue
+                # 图片，通过 image_reader 进行 OCR
+                elif lower.endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp')):
+                    try:
+                        img_result = await tool_registry.process_with_tool("image_reader", path_str)
+                        if isinstance(img_result, dict) and img_result.get("text_content"):
+                            texts.append(img_result["text_content"])
+                    except Exception:
+                        continue
             except Exception:
                 continue
         return "\n\n".join(texts)
@@ -215,6 +248,24 @@ class WorkflowEngine:
             return files
         except Exception:
             return []
+
+    def get_workflow_status(self, db: Session, wf_id: str) -> Optional[Dict[str, Any]]:
+        """获取工作流状态信息"""
+        workflow = get_workflow_by_wf_id(db, wf_id)
+        if not workflow:
+            return None
+        
+        return {
+            "wf_id": workflow.wf_id,
+            "name": workflow.name,
+            "status": workflow.status,
+            "started_at": workflow.started_at.isoformat() if workflow.started_at else None,
+            "finished_at": workflow.finished_at.isoformat() if workflow.finished_at else None,
+            "created_at": workflow.created_at.isoformat() if workflow.created_at else None,
+            "llm_model": workflow.llm_model,
+            "prompt_template": workflow.prompt_template,
+            "error_message": workflow.error_message,
+        }
 
 
 workflow_engine = WorkflowEngine()
