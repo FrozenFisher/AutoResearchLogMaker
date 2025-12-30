@@ -1,0 +1,47 @@
+{
+  "record_id": "20251220_202513_1431",
+  "project": "test",
+  "date": "2025-12-20",
+  "created_at": "2025-12-20 20:25:13.744825",
+  "updated_at": "2025-12-20 20:25:13.744893",
+  "author": {
+    "user_id": "system",
+    "display_name": "System"
+  },
+  "files": [
+    {
+      "file_id": "f_ca48d9e2",
+      "filename": "code1.png",
+      "stored_path": "lib/server/usrdata/test/files/2025-12-20/code1_f_ca48d9e2.png",
+      "original_name": "code1.png",
+      "crc32": "bca77c11",
+      "mime": "image/png",
+      "size_bytes": 337929,
+      "uploaded_at": "2025-12-20 20:25:13.744547",
+      "source": "manual_upload",
+      "tags": [],
+      "language": "en",
+      "status": {
+        "ocr": "pending",
+        "parsed": "pending"
+      },
+      "notes": ""
+    }
+  ],
+  "summary": {
+    "auto_summary": null,
+    "user_notes": null
+  },
+  "workflows": [],
+  "tags": [],
+  "related_git": null,
+  "permissions": {
+    "read": [
+      "system"
+    ],
+    "write": [
+      "system"
+    ]
+  },
+  "notes_general": null
+}

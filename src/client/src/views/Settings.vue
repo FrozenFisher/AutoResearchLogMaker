@@ -53,8 +53,58 @@
           >
             测试连接并获取模型
           </el-button>
+          <el-button
+            :loading="reinitializing"
+            @click="reinitializeModels"
+          >
+            重新初始化模型
+          </el-button>
         </el-form-item>
       </el-form>
+
+      <el-divider />
+
+      <div class="status-section">
+        <div class="status-header">
+          <span class="status-title">模型初始化状态</span>
+        </div>
+        <div v-if="statusLoading" class="status-loading">
+          <el-skeleton :rows="3" animated />
+        </div>
+        <div v-else class="status-content">
+          <el-descriptions :column="1" border>
+            <el-descriptions-item label="LangChain 可用">
+              <el-tag :type="llmStatus.langchain_available ? 'success' : 'danger'">
+                {{ llmStatus.langchain_available ? '是' : '否' }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="OpenAI 已配置">
+              <el-tag :type="llmStatus.openai_configured ? 'success' : 'warning'">
+                {{ llmStatus.openai_configured ? '是' : '否' }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="已初始化模型数量">
+              {{ llmStatus.available_models }}
+            </el-descriptions-item>
+            <el-descriptions-item label="已初始化模型列表">
+              <el-space wrap>
+                <el-tag
+                  v-for="model in llmStatus.models"
+                  :key="model"
+                  :type="model === llmStatus.default_model ? 'primary' : 'info'"
+                >
+                  {{ model }}
+                  <span v-if="model === llmStatus.default_model" style="margin-left: 4px">(默认)</span>
+                </el-tag>
+                <span v-if="llmStatus.models.length === 0" style="color: #909399">暂无已初始化模型</span>
+              </el-space>
+            </el-descriptions-item>
+            <el-descriptions-item label="默认模型">
+              {{ llmStatus.default_model || '未设置' }}
+            </el-descriptions-item>
+          </el-descriptions>
+        </div>
+      </div>
 
       <el-divider />
 
@@ -94,8 +144,17 @@ const form = ref({
 
 const saving = ref(false);
 const testing = ref(false);
+const reinitializing = ref(false);
 const modelsLoading = ref(false);
+const statusLoading = ref(false);
 const models = ref<Array<{ id: string; owned_by?: string; object?: string }>>([]);
+const llmStatus = ref({
+  langchain_available: false,
+  openai_configured: false,
+  available_models: 0,
+  models: [] as string[],
+  default_model: '',
+});
 
 const loadConfig = async () => {
   try {
@@ -125,6 +184,8 @@ const saveConfig = async () => {
     });
     if (result.code === 0) {
       ElMessage.success(result.message || '配置已保存');
+      // 保存后自动加载状态（因为后端会自动初始化）
+      await loadStatus();
     }
   } catch (error) {
     console.error('Save LLM config error:', error);
@@ -165,8 +226,47 @@ const testConnection = async () => {
   }
 };
 
+const loadStatus = async () => {
+  statusLoading.value = true;
+  try {
+    const result = await api.getLlmStatus();
+    if (result.code === 0 && result.data) {
+      llmStatus.value = {
+        langchain_available: result.data.langchain_available || false,
+        openai_configured: result.data.openai_configured || false,
+        available_models: result.data.available_models || 0,
+        models: result.data.models || [],
+        default_model: result.data.default_model || '',
+      };
+    }
+  } catch (error) {
+    console.error('Load LLM status error:', error);
+  } finally {
+    statusLoading.value = false;
+  }
+};
+
+const reinitializeModels = async () => {
+  reinitializing.value = true;
+  try {
+    const result = await api.reinitializeLlmModels();
+    if (result.code === 0) {
+      ElMessage.success(result.message || '模型重新初始化成功');
+      await loadStatus();
+    } else {
+      ElMessage.error(result.message || '模型重新初始化失败');
+    }
+  } catch (error) {
+    console.error('Reinitialize LLM models error:', error);
+    ElMessage.error('重新初始化模型失败');
+  } finally {
+    reinitializing.value = false;
+  }
+};
+
 onMounted(() => {
   loadConfig();
+  loadStatus();
 });
 </script>
 
@@ -205,6 +305,27 @@ onMounted(() => {
 
 .models-loading,
 .models-empty {
+  padding: 12px 0;
+}
+
+.status-section {
+  margin-top: 16px;
+}
+
+.status-header {
+  margin-bottom: 12px;
+}
+
+.status-title {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.status-loading {
+  padding: 12px 0;
+}
+
+.status-content {
   padding: 12px 0;
 }
 </style>

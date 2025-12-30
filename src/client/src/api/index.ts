@@ -275,4 +275,10 @@ export const api = {
 
   getLlmModels: (): Promise<ApiResponse<Array<{ id: string; owned_by?: string; object?: string }>>> =>
     axiosInstance.get('/llm/models'),
+
+  getLlmStatus: (): Promise<ApiResponse<{ langchain_available: boolean; openai_configured: boolean; available_models: number; models: string[]; default_model: string }>> =>
+    axiosInstance.get('/llm/status'),
+
+  reinitializeLlmModels: (): Promise<ApiResponse<{ models: string[]; count: number }>> =>
+    axiosInstance.post('/llm/reinitialize'),
 };

@@ -4,6 +4,7 @@ import json
 
 from server.config import settings
 from server.models import BaseResponse
+from server.LLMManager.LLMService import llm_service
 
 router = APIRouter(prefix="/llm", tags=["llm"])
 
@@ -125,12 +126,34 @@ async def update_llm_config(body: Dict[str, Any]) -> Dict[str, Any]:
       "data": None,
     }
 
-  return {
-    "code": 0,
-    "status": "ok",
-    "message": "配置已更新（部分功能可能需要重启服务生效）",
-    "data": {"base_url": base_url},
-  }
+  # 保存配置后自动重新初始化模型
+  try:
+    reinit_result = llm_service.reinitialize_models()
+    if reinit_result["success"]:
+      return {
+        "code": 0,
+        "status": "ok",
+        "message": f"配置已更新，已自动初始化 {reinit_result['count']} 个模型",
+        "data": {
+          "base_url": base_url,
+          "initialized_models": reinit_result["models"],
+          "model_count": reinit_result["count"],
+        },
+      }
+    else:
+      return {
+        "code": 0,
+        "status": "ok",
+        "message": f"配置已更新，但模型初始化失败: {reinit_result['message']}",
+        "data": {"base_url": base_url},
+      }
+  except Exception as e:
+    return {
+      "code": 0,
+      "status": "ok",
+      "message": f"配置已更新，但模型初始化出错: {str(e)}",
+      "data": {"base_url": base_url},
+    }
 
 
 @router.get("/models", response_model=BaseResponse)
@@ -197,6 +220,44 @@ async def list_llm_models() -> Dict[str, Any]:
       "status": "error",
       "message": f"获取模型列表失败: {e}",
       "data": [],
+    }
+
+
+@router.get("/status", response_model=BaseResponse)
+async def get_llm_status() -> Dict[str, Any]:
+  """获取LLM服务状态（已初始化的模型列表）"""
+  status = llm_service.get_service_status()
+  return {
+    "code": 0,
+    "status": "ok",
+    "message": "",
+    "data": status,
+  }
+
+
+@router.post("/reinitialize", response_model=BaseResponse)
+async def reinitialize_llm_models() -> Dict[str, Any]:
+  """重新初始化LLM模型"""
+  result = llm_service.reinitialize_models()
+  if result["success"]:
+    return {
+      "code": 0,
+      "status": "ok",
+      "message": result["message"],
+      "data": {
+        "models": result["models"],
+        "count": result["count"],
+      },
+    }
+  else:
+    return {
+      "code": 1,
+      "status": "error",
+      "message": result["message"],
+      "data": {
+        "models": result["models"],
+        "count": result["count"],
+      },
     }
 
 

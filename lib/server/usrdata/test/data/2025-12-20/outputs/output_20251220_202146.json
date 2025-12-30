@@ -1,0 +1,41 @@
+{
+  "wf_id": "wf_20251220_202146",
+  "created_at": "2025-12-20T20:21:46.864073",
+  "output": {
+    "summary": "",
+    "context": {
+      "project": "test",
+      "date": "2025-12-20",
+      "wf_id": "wf_20251220_202146",
+      "custom_prompt": null,
+      "files": [],
+      "aggregated_text": "",
+      "text_processed": {
+        "original_text": "",
+        "cleaned_text": "",
+        "text_analysis": {
+          "length": 0,
+          "word_count": 0,
+          "line_count": 1,
+          "paragraph_count": 0,
+          "language_detection": "unknown",
+          "has_numbers": false,
+          "has_special_chars": false,
+          "sentiment_score": 0.0
+        },
+        "segments": [],
+        "processing_info": {
+          "original_length": 0,
+          "cleaned_length": 0,
+          "segment_count": 0,
+          "processing_applied": {
+            "remove_extra_spaces": true,
+            "remove_special_chars": false
+          }
+        }
+      }
+    },
+    "execution_time": "2025-12-20T20:21:46.863812",
+    "error": "LLM生成失败: 生成总结失败: Error code: 401 - {'error': {'message': 'Authentication Fails, Your api key: ****bo\", is invalid', 'type': 'authentication_error', 'param': None, 'code': 'invalid_request_error'}}"
+  }
+}

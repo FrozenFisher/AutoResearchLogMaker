@@ -1,5 +1,7 @@
 """LLM服务"""
 import asyncio
+import json
+from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
 from server.config import settings
@@ -22,43 +24,147 @@ class LLMService:
         self.llm_models = {}
         self._initialize_models()
     
+    def _load_llm_config(self) -> Dict[str, Any]:
+        """从配置文件加载LLM配置"""
+        config_path = settings.USRDATA_DIR / "llm_config.json"
+        if config_path.exists():
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    return {
+                        "base_url": data.get("base_url") or settings.OPENAI_BASE_URL,
+                        "api_key": data.get("api_key") or settings.OPENAI_API_KEY,
+                        "default_model": data.get("default_model") or settings.DEFAULT_LLM_MODEL,
+                    }
+            except (IOError, json.JSONDecodeError):
+                pass
+        # 回退到环境变量配置
+        return {
+            "base_url": settings.OPENAI_BASE_URL,
+            "api_key": settings.OPENAI_API_KEY,
+            "default_model": settings.DEFAULT_LLM_MODEL,
+        }
+    
+    def _get_available_models_from_api(self, base_url: str, api_key: Optional[str] = None) -> List[str]:
+        """从API获取可用模型列表"""
+        try:
+            import httpx
+        except ImportError:
+            return []
+        
+        try:
+            base = base_url.rstrip("/")
+            # 兼容用户已经在 Base URL 里写了 /v1 的情况
+            if base.endswith("/v1"):
+                url = base + "/models"
+            else:
+                url = base + "/v1/models"
+            
+            headers = {}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+            
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.get(url, headers=headers)
+                resp.raise_for_status()
+                data = resp.json()
+            
+            raw_models = data.get("data", [])
+            return [m.get("id") for m in raw_models if m.get("id")]
+        except Exception as e:
+            print(f"从API获取模型列表失败: {e}")
+            return []
+    
     def _initialize_models(self):
-        """初始化LLM模型"""
+        """初始化LLM模型（从配置动态加载）"""
         if not LANGCHAIN_AVAILABLE:
             print("LangChain不可用，跳过模型初始化")
             return
         
+        # 清空现有模型
+        self.llm_models = {}
+        
+        # 加载配置
+        config = self._load_llm_config()
+        base_url = config.get("base_url")
+        api_key = config.get("api_key")
+        default_model = config.get("default_model")
+        
+        if not base_url:
+            print("未配置 LLM Base URL，跳过模型初始化")
+            return
+        
+        if not api_key:
+            print("未配置 API Key，跳过模型初始化")
+            return
+        
         try:
-            # 初始化OpenAI模型
-            if settings.OPENAI_API_KEY:
-                self.llm_models["gpt-3.5-turbo"] = ChatOpenAI(
-                    model="gpt-3.5-turbo",
-                    api_key=settings.OPENAI_API_KEY,
-                    base_url=settings.OPENAI_BASE_URL,
-                    temperature=0.7,
-                    max_tokens=2000
-                )
-                
-                self.llm_models["gpt-4"] = ChatOpenAI(
-                    model="gpt-4",
-                    api_key=settings.OPENAI_API_KEY,
-                    base_url=settings.OPENAI_BASE_URL,
-                    temperature=0.7,
-                    max_tokens=2000
-                )
-                
-                self.llm_models["gpt-4-turbo"] = ChatOpenAI(
-                    model="gpt-4-turbo-preview",
-                    api_key=settings.OPENAI_API_KEY,
-                    base_url=settings.OPENAI_BASE_URL,
-                    temperature=0.7,
-                    max_tokens=4000
-                )
+            # 尝试从API获取可用模型列表
+            available_models = self._get_available_models_from_api(base_url, api_key)
             
-            print(f"成功初始化 {len(self.llm_models)} 个LLM模型")
+            # 确定要初始化的模型列表
+            models_to_init = []
+            if default_model:
+                # 优先初始化默认模型
+                if default_model in available_models:
+                    models_to_init.append(default_model)
+                elif available_models:
+                    # 如果默认模型不在列表中，使用第一个可用模型
+                    print(f"警告: 默认模型 '{default_model}' 不在可用模型列表中，将使用 '{available_models[0]}'")
+                    models_to_init.append(available_models[0])
+                else:
+                    # 如果无法获取模型列表，尝试直接初始化默认模型
+                    models_to_init.append(default_model)
+            elif available_models:
+                # 如果没有默认模型，初始化第一个可用模型
+                models_to_init.append(available_models[0])
+            
+            # 初始化模型
+            for model_name in models_to_init:
+                try:
+                    # 根据模型名称推断合适的 max_tokens
+                    max_tokens = 2000
+                    if "gpt-4" in model_name.lower() or "turbo" in model_name.lower():
+                        max_tokens = 4000
+                    elif "32k" in model_name.lower() or "128k" in model_name.lower():
+                        max_tokens = 8000
+                    
+                    self.llm_models[model_name] = ChatOpenAI(
+                        model=model_name,
+                        api_key=api_key,
+                        base_url=base_url,
+                        temperature=0.7,
+                        max_tokens=max_tokens
+                    )
+                    print(f"成功初始化模型: {model_name}")
+                except Exception as e:
+                    print(f"初始化模型 '{model_name}' 失败: {e}")
+            
+            if self.llm_models:
+                print(f"成功初始化 {len(self.llm_models)} 个LLM模型: {list(self.llm_models.keys())}")
+            else:
+                print("警告: 未能初始化任何LLM模型")
             
         except Exception as e:
             print(f"初始化LLM模型失败: {e}")
+    
+    def reinitialize_models(self) -> Dict[str, Any]:
+        """重新初始化模型（供外部调用）"""
+        try:
+            self._initialize_models()
+            return {
+                "success": True,
+                "message": f"成功初始化 {len(self.llm_models)} 个模型",
+                "models": list(self.llm_models.keys()),
+                "count": len(self.llm_models)
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"重新初始化失败: {str(e)}",
+                "models": [],
+                "count": 0
+            }
     
     async def generate_summary(
         self, 
